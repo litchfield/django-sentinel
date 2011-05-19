@@ -1,0 +1,16 @@
+{% extends 'sentinel/base.html' %}
+
+{% block content %}
+<h1>
+  Usage limit exceeded
+</h1>
+<p>
+  Your IP {{ ip }} has exceeded the usage limits allowed by our website. In order to avoid abuse, your access has been temporarily denied.
+</p>
+<p>
+  Sorry for any inconvenience, you may continue using the site again soon.
+</p>
+<p>
+  Please note that your usage of this website is subject to the terms of use published thereon. The site owners reserve the right to prosecute in a court of law any breach of these terms of use at their sole discretion.
+</p>
+{% endblock %}
