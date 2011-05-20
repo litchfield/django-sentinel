@@ -29,7 +29,7 @@ class SentinelMiddleware(object):
 def blocked(flag, ip, request, update=False):
     useragent = request.META.get('HTTP_USER_AGENT', 'Unknown')
     if flag == GREY and update:
-        flag = greylist(ip, useragent)
+        flag = greylist(ip, useragent, request)
     ctx = {'ip':ip, 'useragent': useragent}
     return render(request, 'sentinel/%s.html' % FLAGS_DICT[flag].lower(), ctx, status=403)
     

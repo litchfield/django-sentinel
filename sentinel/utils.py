@@ -5,13 +5,17 @@ import time
 from ipaddr import _BaseNet, _IPAddrBase, IPNetwork, IPAddress
 from datetime import datetime, timedelta
 from django.core.cache import cache
+from django.core.mail import mail_admins
 from django.db import IntegrityError
+from django.template.loader import render_to_string
 from models import *
 from settings import *
 
 NETWORKS_KEY = '%sN' % CACHE_PREFIX
 flag_key = lambda ip: '%sF%s' % (CACHE_PREFIX, ip)
 track_key = lambda ip: '%sT%s' % (CACHE_PREFIX, ip)
+
+AGES = 60*60*24*365
 
 def address_or_network(ip):
     if isinstance(ip, _IPAddrBase):
@@ -33,7 +37,7 @@ def check_networks(ip):
         if ip in net:
             return flag
 
-def greylist(ip, useragent):
+def greylist(ip, useragent, request):
     """Greylist the given ip/useragent, save to database and update cache,
     Auto blacklist them according to AUTO_BLACK and AUTO_BLACK_EMAIL settings"""
     flag = GREY
@@ -48,12 +52,14 @@ def greylist(ip, useragent):
     if address.count > AUTO_BLACK:
         flag = BLACK
         if AUTO_BLACK_EMAIL:
-            msg = 'IP: %s\nUser Agent:%s\nGreylisting Count:%s\n' % (ip, useragent, address.count)
-            mail_admins('Sentinal Auto Blacklisting', msg)
+            request_repr = repr(request)
+            network_match = str(ip) != str(address.ip)
+            msg = render_to_string('sentinel/blacklisted_email.txt', locals())
+            mail_admins('Blacklisted %s' % ip, msg)
     address.flag = flag
     address.useragent = useragent
     address.save()
-    cache.set(flag_key(ip), flag, timeout=EXPIRE if flag == GREY else 0)
+    cache.set(flag_key(ip), flag, timeout=EXPIRE if flag == GREY else AGES)
     return flag
     
 def track(ip):
@@ -82,7 +88,7 @@ def track(ip):
             else:
                 log.pop()
     log.append((ip, now))
-    cache.set(key, log)
+    cache.set(key, log, timeout=AGES)
     if wcount > WINDOW_MAX:
         return False
     return True
@@ -100,15 +106,11 @@ def load_flag(ip):
         return
 
 def load_networks():
-    "On-demand reload of networks cache"
-    networks = ['']
-    for a in Address.objects.filter(ip__contains__'/'):
-        networks.append((a.ip, a.flag))
-    cache.set(NETWORKS_KEY, networks)
-    return networks
+    "On-demand reload of networks cache and return networks"
+    return update_cache(Address.objects.filter(ip__contains='/'))
     
 def update_cache(addresses):
-    "Bulk updates cache"
+    "Bulk updates cache with given address objects and return networks"
     many = {}
     networks = ['']
     for a in addresses:
@@ -126,13 +128,14 @@ def update_cache(addresses):
         else:
             many[key] = flag
     many[NETWORKS_KEY] = networks
-    cache.set_many(many)
+    cache.set_many(many, timeout=AGES)
+    return networks
 
 def remove_cache(ips):
     "Removes given ips/networks from cache"
     networks = cache.get(NETWORKS_KEY, [])
     networks = [ (ip, flag) for ip, flag in networks if ip not in ips ]
-    cache.set(NETWORKS_KEY, networks)
+    cache.set(NETWORKS_KEY, networks, timeout=AGES)
     many = [ flag_key(ip) for ip in ips ]
     cache.delete_many(many)
 
@@ -148,5 +151,5 @@ def remove_addresses(qs):
 def init_cache():
     cutoff = datetime.now() - timedelta(seconds=EXPIRE)
     update_cache(Address.objects.iterator())
-    
+
 init_cache()

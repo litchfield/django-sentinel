@@ -1,0 +1,28 @@
+The following address has been auto blacklisted by django-sentinel.
+
+IP: 
+{{ ip }}
+{% if network_match %}
+Matched network rule:
+{{ address.ip }}
+{% endif %}
+User Agent: 
+{{ useragent }}
+{% if address.useragent != useragent %}
+Last User Agent:
+{{ address.useragent }}
+{% endif %}
+Total greylistings: 
+{{ address.count }} (including this one)
+
+First recorded: 
+{{ address.count|date:"r" }}
+
+Last updated: 
+{{ address.count|date:"r" }}
+
+Updated now: 
+{% now "r" %}
+
+
+{{ request_repr }}
