@@ -2,6 +2,7 @@ from ipaddr import _IPAddrBase, IPAddress, IPNetwork
 from django.core.exceptions import ValidationError
 from django import forms
 from django.db import models
+from utils import address_or_network
 
 class IPFieldWidget(forms.TextInput):
     def render(self, name, value, attrs=None):
@@ -28,7 +29,6 @@ class IPField(models.Field):
     def to_python(self, value):
         if not value:
             return
-        from utils import address_or_network
         return address_or_network(value)
 
     def formfield(self, **kwargs):

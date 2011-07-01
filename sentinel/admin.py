@@ -3,44 +3,59 @@ from django.contrib.messages import success
 from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
+from django.contrib import messages
 from models import *
-from utils import update_cache, remove_cache
+from flags import *
 from forms import BulkForm
 
 class AddressAdmin(admin.ModelAdmin):
-    list_display = ('ip_', 'flag', 'useragent_', 'updated')
-    list_filter = ('flag', 'updated', )
-    search_fields = ('ip', )
+    list_display = ('ip', 'flag', 'useragent_', 'updated')
+    list_filter = ('flag', 'is_network', 'updated', )
+    search_fields = ('ip', 'useragent', )
     readonly_fields = ('useragent', 'count', 'created', 'updated', )
-    actions = None
-    
-    def save_model(self, request, obj, form, change):
-        obj.save()
-        update_cache([obj])
+    actions = ['delete_selected', 'whitelist', 'greylist', 'blacklist', 'brownlist']
 
-    def delete_model(self, request, obj):
-        remove_cache([obj.ip])
-        obj.delete()
+    @staticmethod
+    def _list(qs, flag):
+        qs.update(flag=flag)
+        load_flags(qs)
+        return "%s %sed." % (len(qs), FLAGS_DICT[flag].lower())
     
+    def whitelist(self, request, queryset):
+        self.message_user(request, self._list(queryset, WHITE))
+    whitelist.short_description = "Whitelist"
+
+    def greylist(self, request, queryset):
+        self.message_user(request, self._list(queryset, GREY))
+    greylist.short_description = "Greylist"
+
+    def blacklist(self, request, queryset):
+        self.message_user(request, self._list(queryset, BLACK))
+    blacklist.short_description = "Blacklist"
+
+    def brownlist(self, request, queryset):
+        self.message_user(request, self._list(queryset, BROWN))
+    brownlist.short_description = "Brownlist"
+        
     def get_urls(self):
         urls = super(AddressAdmin, self).get_urls()
         my_urls = patterns('',
+            (r'^reload/$', reload_flags),
             (r'^bulk/(\d)/$', admin_bulk),
         )
         return my_urls + urls
     
     def useragent_(self, obj):
-        TRIM = 50
+        TRIM = 100
         if len(obj.useragent) > TRIM:
             return '%s...'%obj.useragent[:TRIM]
         return obj.useragent
         
-    def ip_(self, obj):
-        "Hack to fix encoding problem"
-        return '<a href="%s/">%s</a>' % (str(obj.ip).replace('/', '_2F'), str(obj))
-    ip_.allow_tags = True
-    ip_.short_description = 'IP/Network'
-        
+def reload_flags(request):
+    msg = load_flags()
+    messages.success(request, 'Successfully %s' % msg)
+    return HttpResponseRedirect('..')
+    
 def admin_bulk(request, flag):
     try:
         title = FLAGS_DICT[int(flag)]
@@ -50,8 +65,10 @@ def admin_bulk(request, flag):
     if form.is_valid():
         form.save()
         success(request, 'Successfully saved %s.' % title.lower())
+        url = '.'
         if request.POST.get('_save'):
-            return HttpResponseRedirect('../../')
+            url = '../../'
+        return HttpResponseRedirect(url)
     return render(request, 'admin/sentinel/bulk.html', locals())
 
 admin.site.register(Address, AddressAdmin)
