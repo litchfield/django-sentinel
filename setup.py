@@ -51,5 +51,5 @@ setup(
       description = 'Anti scraping app for django',
       packages = packages,
       data_files = data_files,
-      install_requires= ["Django", 'ipadrr', 'netaddr'],
+      install_requires= ["Django", 'ipaddr', 'netaddr'],
 )
